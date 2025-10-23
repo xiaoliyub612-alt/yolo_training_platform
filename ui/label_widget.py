@@ -7,7 +7,7 @@ from pathlib import Path
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QGroupBox, QMessageBox, QFileDialog, QProgressDialog,
-                             QLabel)
+                             QLabel, QApplication)
 
 
 class DatasetMakerThread(QThread):
@@ -49,9 +49,9 @@ class DatasetMakerThread(QThread):
 class LabelWidget(QWidget):
     """标注界面 - 集成labelme"""
 
-    def __init__(self, category_manager):
+    def __init__(self, product_manager):
         super().__init__()
-        self.category_manager = category_manager
+        self.product_manager = product_manager
         self.labelme_window = None
         self.current_dir = None
         self.init_ui()
@@ -66,12 +66,10 @@ class LabelWidget(QWidget):
         info_group = QGroupBox("标注说明")
         info_layout = QVBoxLayout()
         info_text = QLabel(
-            "• 点击"
-        "打开标注工具"
-        "启动图像标注工具\n"
-        "• 支持矩形、多边形等多种标注方式\n"
-        "• 标注完成后可一键制作YOLO训练数据集\n"
-        "• 数据集将自动划分为训练集和验证集"
+            "• 点击打开标注工具启动图像标注工具\n"
+            "• 支持矩形、多边形等多种标注方式\n"
+            "• 标注完成后可一键制作YOLO训练数据集\n"
+            "• 数据集将自动划分为训练集和验证集"
         )
         info_text.setStyleSheet("color: #7f8c8d; padding: 10px;")
         info_layout.addWidget(info_text)
@@ -100,6 +98,25 @@ class LabelWidget(QWidget):
         """)
         self.open_labelme_btn.clicked.connect(self.open_labelme)
         label_layout.addWidget(self.open_labelme_btn)
+
+        # 同步类别按钮
+        self.sync_labels_btn = QPushButton("🔄 从标注同步类别到产品")
+        self.sync_labels_btn.setStyleSheet("""
+            QPushButton {
+                background: #f39c12;
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #e67e22;
+            }
+        """)
+        self.sync_labels_btn.clicked.connect(self.sync_labels_to_product)
+        label_layout.addWidget(self.sync_labels_btn)
 
         # 当前目录显示
         self.current_dir_label = QLabel("未选择目录")
@@ -172,17 +189,11 @@ class LabelWidget(QWidget):
         help_layout = QVBoxLayout()
         help_text = QLabel(
             "<b>标注流程：</b><br>"
-            "1. 在"
-        '类别管理'
-        "页面添加需要检测的目标类别<br>"
-        "2. 点击"
-       '打开标注工具'
-        "，选择图像目录开始标注<br>"
-        "3. 使用矩形工具框选目标，选择对应类别<br>"
-        "4. 标注完成后，选择标注目录，点击"
-        '一键制作YOLO数据集'
-        "<br>"
-        "5. 数据集将自动生成YOLO格式的训练文件和配置"
+            "1. 在产品管理页面添加产品，然后为每个产品添加缺陷类别<br>"
+            "2. 点击打开标注工具，选择图像目录开始标注<br>"
+            "3. 使用矩形工具框选缺陷，选择对应的缺陷类别<br>"
+            "4. 标注完成后，选择标注目录，点击一键制作YOLO数据集<br>"
+            "5. 数据集将自动生成YOLO格式的训练文件和配置"
         )
         help_text.setStyleSheet("color: #34495e; padding: 10px; line-height: 1.6;")
         help_text.setWordWrap(True)
@@ -195,52 +206,99 @@ class LabelWidget(QWidget):
     def open_labelme(self):
         """打开labelme标注工具"""
         try:
-            # 检查是否有类别
-            if self.category_manager.get_category_count() == 0:
-                QMessageBox.warning(
-                    self, "警告",
-                    "请先在"
-                '类别管理'
-                "页面添加至少一个类别！"
-                )
-                return
+            # 放开前置校验：无缺陷类别也可进入标注
+
+            # 显示进度提示
+            from PyQt5.QtWidgets import QProgressDialog
+            progress = QProgressDialog("正在启动标注工具...", "取消", 0, 0, self)
+            progress.setWindowTitle("启动标注工具")
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setMinimumDuration(0)
+            progress.setValue(0)
+            progress.show()
+            QApplication.processEvents()
 
             # 导入修改后的labelme
             from labelme_modified.labelme_app import LabelmeMainWindow
 
-            # 获取类别列表
-            labels = self.category_manager.get_category_names()
+            # 获取缺陷类别列表（允许为空）
+            labels = self.product_manager.get_category_names()
 
             # 创建labelme窗口
             if self.labelme_window is None or not self.labelme_window.isVisible():
-                # 创建配置
+                # 创建配置（包含 labelme 需要的必需字段，如 shape）
                 config = {
                     'labels': labels,
                     'sort_labels': True,
                     'show_label_text_field': True,
                     'label_completion': 'startswith',
                     'fit_to_content': {'column': True, 'row': False},
-                    'label_flags': {},
-                    'flags': {},
-                    'epsilon': 10.0,
-                    'canvas': {
-                        'double_click': 'close',
-                        'num_backups': 10,
-                        'crosshair': True,
-                        'fill_drawing': False
-                    },
-                    'keep_prev': False,
-                    'keep_prev_scale': False,
-                    'keep_prev_brightness_contrast': False,
                     'auto_save': True,
                     'store_data': False,
                     'validate_label': None,
+                    'label_flags': {},
+                    'flags': {},
                     'shape_color': 'auto',
                     'shift_auto_shape_color': 0,
                     'label_colors': {},
                     'default_shape_color': None,
                     'display_label_popup': True,
                     'file_search': None,
+                    'keep_prev': False,
+                    'keep_prev_scale': False,
+                    'keep_prev_brightness_contrast': False,
+                    'epsilon': 10.0,
+                    'canvas': {
+                        'double_click': 'close',
+                        'num_backups': 10,
+                        'crosshair': {
+                            'polygon': True,
+                            'rectangle': True,
+                            'circle': True,
+                            'line': True,
+                            'point': True,
+                            'linestrip': True,
+                            'ai_polygon': True,
+                            'ai_mask': True
+                        },
+                        'fill_drawing': False
+                    },
+                    'flag_dock': {
+                        'show': False,
+                        'closable': True,
+                        'floatable': True,
+                        'movable': True
+                    },
+                    'label_dock': {
+                        'show': True,
+                        'closable': True,
+                        'floatable': True,
+                        'movable': True
+                    },
+                    'shape_dock': {
+                        'show': True,
+                        'closable': True,
+                        'floatable': True,
+                        'movable': True
+                    },
+                    'file_dock': {
+                        'show': True,
+                        'closable': True,
+                        'floatable': True,
+                        'movable': True
+                    },
+                    'ai': {
+                        'default': 'Sam2 (balanced)'
+                    },
+                    'shape': {
+                        'line_color': [0, 255, 0, 128],
+                        'fill_color': [0, 255, 0, 100],
+                        'select_line_color': [255, 255, 255, 255],
+                        'select_fill_color': [0, 255, 0, 155],
+                        'vertex_fill_color': [0, 255, 0, 255],
+                        'hvertex_fill_color': [255, 255, 255, 255],
+                        'point_size': 8
+                    },
                     'shortcuts': {
                         'quit': 'Ctrl+Q',
                         'open': 'Ctrl+O',
@@ -276,60 +334,98 @@ class LabelWidget(QWidget):
                         'fit_window': 'Ctrl+F',
                         'fit_width': 'Ctrl+Shift+F',
                         'edit_label': 'Ctrl+E'
-                    },
-                    'shape': {
-                        'line_color': [0, 255, 0, 128],
-                        'fill_color': [0, 255, 0, 100],
-                        'select_line_color': [255, 255, 255, 255],
-                        'select_fill_color': [0, 255, 0, 155],
-                        'vertex_fill_color': [0, 255, 0, 255],
-                        'hvertex_fill_color': [255, 255, 255, 255],
-                        'point_size': 8
-                    },
-                    'flag_dock': {
-                        'show': False,
-                        'closable': True,
-                        'floatable': True,
-                        'movable': True
-                    },
-                    'label_dock': {
-                        'show': True,
-                        'closable': True,
-                        'floatable': True,
-                        'movable': True
-                    },
-                    'shape_dock': {
-                        'show': True,
-                        'closable': True,
-                        'floatable': True,
-                        'movable': True
-                    },
-                    'file_dock': {
-                        'show': True,
-                        'closable': True,
-                        'floatable': True,
-                        'movable': True
-                    },
-                    'ai': {
-                        'default': 'Sam2 (balanced)'
                     }
                 }
 
-                self.labelme_window = LabelmeMainWindow(config=config)
+                progress.setLabelText("正在初始化标注工具...")
+                QApplication.processEvents()
+                
+                # 若产品有默认路径，作为初始目录
+                initial_dir = None
+                try:
+                    products = self.product_manager.get_products()
+                    if products:
+                        # 优先使用最近选择的产品（无法获取时取第一个有路径的）
+                        for p in products:
+                            if p.get('path'):
+                                initial_dir = p.get('path')
+                                break
+                except Exception:
+                    pass
+
+                self.labelme_window = LabelmeMainWindow(config=config, output_dir=initial_dir)
+                
+                progress.setLabelText("正在显示标注工具...")
+                QApplication.processEvents()
+                
                 self.labelme_window.show()
+                
+                progress.close()
             else:
                 self.labelme_window.raise_()
                 self.labelme_window.activateWindow()
+                progress.close()
 
-        except ImportError:
+        except ImportError as e:
+            progress.close()
+            reply = QMessageBox.question(
+                self, "labelme未安装",
+                f"无法导入labelme模块！\n\n是否要安装labelme？\n\n错误详情：{str(e)}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self._install_labelme()
+        except Exception as e:
+            progress.close()
             QMessageBox.critical(
                 self, "错误",
-                "无法导入labelme模块！\n请确保已安装labelme：\npip install labelme"
+                f"打开标注工具时出错：\n{str(e)}\n\n请检查labelme是否正确安装。"
+            )
+
+    def _install_labelme(self):
+        """安装labelme"""
+        try:
+            import subprocess
+            import sys
+            
+            # 显示安装进度
+            progress = QProgressDialog("正在安装labelme...", "取消", 0, 0, self)
+            progress.setWindowTitle("安装labelme")
+            progress.setWindowModality(Qt.WindowModal)
+            progress.setMinimumDuration(0)
+            progress.show()
+            QApplication.processEvents()
+            
+            # 安装labelme
+            result = subprocess.run([
+                sys.executable, "-m", "pip", "install", "labelme"
+            ], capture_output=True, text=True, timeout=300)
+            
+            progress.close()
+            
+            if result.returncode == 0:
+                QMessageBox.information(
+                    self, "安装成功",
+                    "labelme安装成功！\n请重新启动应用程序。"
+                )
+            else:
+                QMessageBox.critical(
+                    self, "安装失败",
+                    f"labelme安装失败：\n{result.stderr}\n\n请手动安装：\npip install labelme"
+                )
+                
+        except subprocess.TimeoutExpired:
+            progress.close()
+            QMessageBox.critical(
+                self, "安装超时",
+                "安装超时，请手动安装：\npip install labelme"
             )
         except Exception as e:
+            progress.close()
             QMessageBox.critical(
-                self, "错误",
-                f"打开标注工具时出错：\n{str(e)}"
+                self, "安装错误",
+                f"安装过程中出错：\n{str(e)}\n\n请手动安装：\npip install labelme"
             )
 
     def select_source_directory(self):
@@ -371,13 +467,11 @@ class LabelWidget(QWidget):
             if not self.current_dir:
                 return
 
-        # 检查类别
-        if self.category_manager.get_category_count() == 0:
+        # 检查缺陷类别
+        if self.product_manager.get_category_count() == 0:
             QMessageBox.warning(
                 self, "警告",
-                "请先在"
-            '类别管理'
-            "页面添加类别！"
+                "请先在产品管理页面添加缺陷类别！"
             )
             return
 
@@ -410,7 +504,7 @@ class LabelWidget(QWidget):
         progress.setValue(0)
 
         # 创建线程
-        categories = self.category_manager.get_category_names()
+        categories = self.product_manager.get_category_names()
         self.maker_thread = DatasetMakerThread(
             self.current_dir, output_dir, categories, train_ratio=0.8
         )
@@ -434,3 +528,61 @@ class LabelWidget(QWidget):
             QMessageBox.information(self, "成功", message)
         else:
             QMessageBox.warning(self, "失败", message)
+
+    def sync_labels_to_product(self):
+        """从标注目录扫描类别并同步到产品管理"""
+        try:
+            from pathlib import Path
+            import json
+
+            # 选择产品
+            from PyQt5.QtWidgets import QInputDialog
+            products = self.product_manager.get_products()
+            if not products:
+                QMessageBox.warning(self, "提示", "请先在产品管理中添加产品！")
+                return
+
+            product_names = [p['name'] for p in products]
+            product_name, ok = QInputDialog.getItem(self, "选择产品", "将类别同步到产品：", product_names, 0, False)
+            if not ok:
+                return
+
+            # 找到产品ID
+            product_id = None
+            for p in products:
+                if p['name'] == product_name:
+                    product_id = p['id']
+                    break
+
+            if not self.current_dir:
+                QMessageBox.information(self, "提示", "请先选择标注目录（上方‘选择标注目录’）！")
+                return
+
+            # 扫描json标注文件，收集label
+            labels_found = set()
+            for json_file in Path(self.current_dir).glob('*.json'):
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        shapes = data.get('shapes', [])
+                        for s in shapes:
+                            name = s.get('label')
+                            if name:
+                                labels_found.add(name)
+                except Exception:
+                    continue
+
+            if not labels_found:
+                QMessageBox.information(self, "提示", "未在标注文件中发现新的类别。")
+                return
+
+            # 写入到产品的缺陷类别（去重）
+            added = 0
+            for name in sorted(labels_found):
+                if not self.product_manager.defect_category_exists(product_id, name):
+                    if self.product_manager.add_defect_category(product_id, name, ""):
+                        added += 1
+
+            QMessageBox.information(self, "同步完成", f"同步完成，共新增 {added} 个缺陷类别。")
+        except Exception as e:
+            QMessageBox.warning(self, "同步失败", f"同步时出错：{str(e)}")

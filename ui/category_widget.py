@@ -1,5 +1,5 @@
 """
-类别管理界面
+产品管理界面
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QHeaderView,
@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
 
 
 class CategoryDialog(QDialog):
-    """类别编辑对话框"""
+    """产品编辑对话框"""
 
     def __init__(self, parent=None, category=None):
         super().__init__(parent)
@@ -21,21 +21,21 @@ class CategoryDialog(QDialog):
 
     def init_ui(self):
         """初始化UI"""
-        self.setWindowTitle("编辑类别" if self.category else "添加类别")
+        self.setWindowTitle("编辑产品" if self.category else "添加产品")
         self.setModal(True)
         self.resize(400, 250)
 
         layout = QVBoxLayout(self)
 
         # 名称
-        name_label = QLabel("类别名称：")
+        name_label = QLabel("产品名称：")
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("请输入类别名称")
+        self.name_edit.setPlaceholderText("请输入产品名称")
         layout.addWidget(name_label)
         layout.addWidget(self.name_edit)
 
         # 描述
-        desc_label = QLabel("类别描述：")
+        desc_label = QLabel("产品描述：")
         self.desc_edit = QTextEdit()
         self.desc_edit.setPlaceholderText("请输入类别描述（可选）")
         self.desc_edit.setMaximumHeight(100)
@@ -64,7 +64,7 @@ class CategoryDialog(QDialog):
 
 
 class CategoryWidget(QWidget):
-    """类别管理界面"""
+    """产品管理界面"""
 
     def __init__(self, category_manager):
         super().__init__()
@@ -79,10 +79,10 @@ class CategoryWidget(QWidget):
         layout.setSpacing(15)
 
         # 标题和说明
-        title_group = QGroupBox("类别管理")
+        title_group = QGroupBox("产品管理")
         title_layout = QVBoxLayout()
 
-        info_label = QLabel("管理YOLO模型的检测类别，用于标注和训练")
+        info_label = QLabel("管理用于标注与训练的产品列表（产品名将作为标注类别使用）")
         info_label.setStyleSheet("color: #7f8c8d; font-size: 13px;")
         title_layout.addWidget(info_label)
         title_group.setLayout(title_layout)
@@ -91,7 +91,7 @@ class CategoryWidget(QWidget):
         # 按钮组
         btn_layout = QHBoxLayout()
 
-        self.add_btn = QPushButton("➕ 添加类别")
+        self.add_btn = QPushButton("➕ 添加产品")
         self.add_btn.clicked.connect(self.add_category)
         self.add_btn.setStyleSheet("""
             QPushButton {
@@ -107,7 +107,7 @@ class CategoryWidget(QWidget):
             }
         """)
 
-        self.edit_btn = QPushButton("✏️ 编辑类别")
+        self.edit_btn = QPushButton("✏️ 编辑产品")
         self.edit_btn.clicked.connect(self.edit_category)
         self.edit_btn.setEnabled(False)
         self.edit_btn.setStyleSheet("""
@@ -127,7 +127,7 @@ class CategoryWidget(QWidget):
             }
         """)
 
-        self.delete_btn = QPushButton("🗑️ 删除类别")
+        self.delete_btn = QPushButton("🗑️ 删除产品")
         self.delete_btn.clicked.connect(self.delete_category)
         self.delete_btn.setEnabled(False)
         self.delete_btn.setStyleSheet("""
@@ -174,7 +174,7 @@ class CategoryWidget(QWidget):
         # 类别表格
         self.table = QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(['ID', '类别名称', '描述', '创建时间'])
+        self.table.setHorizontalHeaderLabels(['ID', '产品名称', '描述', '创建时间'])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
@@ -225,7 +225,7 @@ class CategoryWidget(QWidget):
             self.table.setItem(row, 2, QTableWidgetItem(cat.get('description', '')))
             self.table.setItem(row, 3, QTableWidgetItem(cat.get('created_at', '')))
 
-        self.stats_label.setText(f"共 {len(categories)} 个类别")
+        self.stats_label.setText(f"共 {len(categories)} 个产品")
 
     def on_selection_changed(self):
         """选择变化"""
@@ -234,22 +234,22 @@ class CategoryWidget(QWidget):
         self.delete_btn.setEnabled(has_selection)
 
     def add_category(self):
-        """添加类别"""
+        """添加产品"""
         dialog = CategoryDialog(self)
         if dialog.exec_() == QDialog.Accepted:
             data = dialog.get_data()
             if not data['name']:
-                QMessageBox.warning(self, "警告", "类别名称不能为空！")
+                QMessageBox.warning(self, "警告", "产品名称不能为空！")
                 return
 
             if self.category_manager.add_category(data['name'], data['description']):
-                QMessageBox.information(self, "成功", "类别添加成功！")
+                QMessageBox.information(self, "成功", "产品添加成功！")
                 self.load_categories()
             else:
-                QMessageBox.warning(self, "失败", "类别已存在或添加失败！")
+                QMessageBox.warning(self, "失败", "产品已存在或添加失败！")
 
     def edit_category(self):
-        """编辑类别"""
+        """编辑产品"""
         selected = self.table.selectedItems()
         if not selected:
             return
@@ -265,17 +265,17 @@ class CategoryWidget(QWidget):
         if dialog.exec_() == QDialog.Accepted:
             data = dialog.get_data()
             if not data['name']:
-                QMessageBox.warning(self, "警告", "类别名称不能为空！")
+                QMessageBox.warning(self, "警告", "产品名称不能为空！")
                 return
 
             if self.category_manager.update_category(category_id, data['name'], data['description']):
-                QMessageBox.information(self, "成功", "类别更新成功！")
+                QMessageBox.information(self, "成功", "产品更新成功！")
                 self.load_categories()
             else:
-                QMessageBox.warning(self, "失败", "类别名称已存在或更新失败！")
+                QMessageBox.warning(self, "失败", "产品名称已存在或更新失败！")
 
     def delete_category(self):
-        """删除类别"""
+        """删除产品"""
         selected = self.table.selectedItems()
         if not selected:
             return
@@ -286,14 +286,14 @@ class CategoryWidget(QWidget):
 
         reply = QMessageBox.question(
             self, '确认删除',
-            f'确定要删除类别 "{category_name}" 吗？\n注意：这将影响使用该类别的标注数据！',
+            f'确定要删除产品 "{category_name}" 吗？\n注意：这将影响使用该产品名称的标注数据！',
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             if self.category_manager.delete_category(category_id):
-                QMessageBox.information(self, "成功", "类别删除成功！")
+                QMessageBox.information(self, "成功", "产品删除成功！")
                 self.load_categories()
             else:
-                QMessageBox.warning(self, "失败", "类别删除失败！")
+                QMessageBox.warning(self, "失败", "产品删除失败！")

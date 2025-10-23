@@ -2,8 +2,17 @@
 修改后的Labelme主窗口 - 中文化并移除品牌标识
 这是对原labelme的最小化修改包装
 """
-from PyQt5.QtWidgets import QMessageBox
-from labelme.app import MainWindow as LabelmeMainWindowBase
+import sys
+from PyQt5.QtWidgets import QMessageBox, QApplication
+from PyQt5.QtCore import QTimer
+
+try:
+    from labelme.app import MainWindow as LabelmeMainWindowBase
+    LABELME_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: labelme not available: {e}")
+    LABELME_AVAILABLE = False
+    LabelmeMainWindowBase = None
 
 
 class LabelmeMainWindow(LabelmeMainWindowBase):
@@ -11,57 +20,80 @@ class LabelmeMainWindow(LabelmeMainWindowBase):
 
     def __init__(self, config=None, filename=None, output=None,
                  output_file=None, output_dir=None):
-        super().__init__(config, filename, output, output_file, output_dir)
-
-        # 修改窗口标题
-        self.setWindowTitle("图像标注工具")
-
-        # 移除或修改About菜单
-        self._modify_menus()
+        if not LABELME_AVAILABLE:
+            raise ImportError("labelme模块未安装或不可用")
+        
+        try:
+            super().__init__(config, filename, output, output_file, output_dir)
+            
+            # 修改窗口标题
+            self.setWindowTitle("图像标注工具")
+            
+            # 延迟修改菜单，避免初始化时阻塞
+            QTimer.singleShot(100, self._modify_menus)
+            
+        except Exception as e:
+            print(f"Error initializing labelme: {e}")
+            raise
 
     def _modify_menus(self):
         """修改菜单 - 移除about或替换内容"""
-        # 移除原有的about action
-        if hasattr(self.actions, 'about'):
-            # 替换about的处理函数
-            self.actions.about = self._create_custom_about_action()
+        try:
+            # 检查必要的属性是否存在
+            if not hasattr(self, 'actions') or not hasattr(self, 'menus'):
+                print("Warning: actions or menus not available")
+                return
+                
+            # 移除原有的about action
+            if hasattr(self.actions, 'about'):
+                # 替换about的处理函数
+                self.actions.about = self._create_custom_about_action()
 
-            # 重新构建Help菜单
-            self.menus.help.clear()
-            help_action = self._create_help_action()
-            self.menus.help.addAction(help_action)
-            self.menus.help.addAction(self.actions.about)
+                # 重新构建Help菜单
+                if hasattr(self.menus, 'help') and self.menus.help:
+                    self.menus.help.clear()
+                    help_action = self._create_help_action()
+                    self.menus.help.addAction(help_action)
+                    self.menus.help.addAction(self.actions.about)
+        except Exception as e:
+            print(f"Error modifying menus: {e}")
+            # 不抛出异常，避免影响主程序
 
     def _create_custom_about_action(self):
         """创建自定义的About动作"""
-        from labelme import utils
+        try:
+            from labelme import utils
 
-        def show_custom_about():
-            QMessageBox.about(
-                self,
-                "关于",
-                """
+            def show_custom_about():
+                QMessageBox.about(
+                    self,
+                    "关于",
+                    """
 <h3>图像标注工具</h3>
 <p>用于目标检测的图像标注工具</p>
 <p>支持多种标注形式：矩形、多边形、圆形等</p>
 <p>基于开源项目 labelme 修改</p>
 """
-            )
+                )
 
-        return utils.newAction(
-            self,
-            text="关于(&A)",
-            slot=show_custom_about,
-            icon=None,
-            tip="关于本软件"
-        )
+            return utils.newAction(
+                self,
+                text="关于(&A)",
+                slot=show_custom_about,
+                icon=None,
+                tip="关于本软件"
+            )
+        except Exception as e:
+            print(f"Error creating about action: {e}")
+            return None
 
     def _create_help_action(self):
         """创建帮助动作"""
-        from labelme import utils
+        try:
+            from labelme import utils
 
-        def show_help():
-            help_text = """
+            def show_help():
+                help_text = """
 <h3>快捷键说明</h3>
 <table>
 <tr><td><b>Ctrl+O</b></td><td>打开图像</td></tr>
@@ -83,15 +115,18 @@ class LabelmeMainWindow(LabelmeMainWindowBase):
 <p>4. 在弹出框中输入或选择类别名称</p>
 <p>5. 标注会自动保存为JSON文件</p>
 """
-            QMessageBox.about(self, "使用帮助", help_text)
+                QMessageBox.about(self, "使用帮助", help_text)
 
-        return utils.newAction(
-            self,
-            text="帮助(&H)",
-            slot=show_help,
-            icon="help",
-            tip="查看使用帮助"
-        )
+            return utils.newAction(
+                self,
+                text="帮助(&H)",
+                slot=show_help,
+                icon="help",
+                tip="查看使用帮助"
+            )
+        except Exception as e:
+            print(f"Error creating help action: {e}")
+            return None
 
     def tr(self, text):
         """翻译函数 - 将英文翻译为中文"""

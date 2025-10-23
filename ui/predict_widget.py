@@ -7,7 +7,7 @@ import cv2
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-                             QGroupBox, QLabel, QLineEdit, QFileDialog, QMessageBox, QSlider, QListWidget, QSplitter)
+                             QGroupBox, QLabel, QLineEdit, QFileDialog, QMessageBox, QSlider, QListWidget, QSplitter, QComboBox)
 
 
 class PredictThread(QThread):
@@ -15,12 +15,15 @@ class PredictThread(QThread):
     result_signal = pyqtSignal(object, str)  # results, image_path
     finished_signal = pyqtSignal(bool, str)
 
-    def __init__(self, model_path, image_paths, conf_threshold, iou_threshold):
+    def __init__(self, model_path, image_paths, conf_threshold, iou_threshold, device, imgsz, max_det):
         super().__init__()
         self.model_path = model_path
         self.image_paths = image_paths
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
+        self.device = device
+        self.imgsz = imgsz
+        self.max_det = max_det
 
     def run(self):
         try:
@@ -35,6 +38,9 @@ class PredictThread(QThread):
                     img_path,
                     conf=self.conf_threshold,
                     iou=self.iou_threshold,
+                    device=self.device,
+                    imgsz=self.imgsz,
+                    max_det=self.max_det,
                     verbose=False
                 )
                 self.result_signal.emit(results[0], img_path)
@@ -48,9 +54,9 @@ class PredictThread(QThread):
 class PredictWidget(QWidget):
     """预测界面"""
 
-    def __init__(self, category_manager):
+    def __init__(self, product_manager):
         super().__init__()
-        self.category_manager = category_manager
+        self.product_manager = product_manager
         self.predict_thread = None
         self.current_results = None
         self.current_image_path = None
@@ -86,6 +92,28 @@ class PredictWidget(QWidget):
         self.model_btn.setMaximumWidth(40)
         model_file_layout.addWidget(self.model_btn)
         model_layout.addLayout(model_file_layout)
+
+        # 设备
+        device_layout = QHBoxLayout()
+        device_layout.addWidget(QLabel("设备:"))
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(['自动选择', 'CPU', 'GPU (cuda:0)', 'GPU (cuda:1)'])
+        device_layout.addWidget(self.device_combo)
+        model_layout.addLayout(device_layout)
+
+        # 图像尺寸
+        imgsz_layout = QHBoxLayout()
+        imgsz_layout.addWidget(QLabel("图像尺寸:"))
+        self.imgsz_combo = QComboBox(); self.imgsz_combo.addItems(['320','416','512','640','800','1024']); self.imgsz_combo.setCurrentIndex(3)
+        imgsz_layout.addWidget(self.imgsz_combo)
+        model_layout.addLayout(imgsz_layout)
+
+        # 最大检测数
+        maxdet_layout = QHBoxLayout()
+        maxdet_layout.addWidget(QLabel("最大检测数:"))
+        self.maxdet_combo = QComboBox(); self.maxdet_combo.addItems(['100','300','1000'])
+        maxdet_layout.addWidget(self.maxdet_combo)
+        model_layout.addLayout(maxdet_layout)
 
         # 置信度阈值
         conf_layout = QHBoxLayout()
@@ -190,16 +218,49 @@ class PredictWidget(QWidget):
 
         left_layout.addStretch()
 
-        # 右侧：预测结果显示
+        # 右侧：图像显示区域（原图+效果图）
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 结果显示
-        result_group = QGroupBox("预测结果")
-        result_layout = QVBoxLayout()
+        # 图像对比显示
+        image_group = QGroupBox("图像对比")
+        image_layout = QHBoxLayout()
 
-        # 图像显示
+        # 左侧：原图像
+        left_image_widget = QWidget()
+        left_image_layout = QVBoxLayout(left_image_widget)
+        
+        left_title = QLabel("原图像")
+        left_title.setStyleSheet("font-weight: bold; color: #2c3e50; font-size: 14px;")
+        left_title.setAlignment(Qt.AlignCenter)
+        left_image_layout.addWidget(left_title)
+        
+        self.original_label = QLabel()
+        self.original_label.setAlignment(Qt.AlignCenter)
+        self.original_label.setStyleSheet("""
+            QLabel {
+                background: #2c3e50;
+                border: 2px solid #34495e;
+                border-radius: 8px;
+                min-height: 300px;
+            }
+        """)
+        self.original_label.setText("原图像将显示在这里")
+        self.original_label.setScaledContents(False)
+        left_image_layout.addWidget(self.original_label)
+        
+        image_layout.addWidget(left_image_widget)
+
+        # 右侧：预测结果
+        right_image_widget = QWidget()
+        right_image_layout = QVBoxLayout(right_image_widget)
+        
+        right_title = QLabel("预测结果")
+        right_title.setStyleSheet("font-weight: bold; color: #2c3e50; font-size: 14px;")
+        right_title.setAlignment(Qt.AlignCenter)
+        right_image_layout.addWidget(right_title)
+        
         self.result_label = QLabel()
         self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.setStyleSheet("""
@@ -207,12 +268,17 @@ class PredictWidget(QWidget):
                 background: #2c3e50;
                 border: 2px solid #34495e;
                 border-radius: 8px;
-                min-height: 400px;
+                min-height: 300px;
             }
         """)
         self.result_label.setText("预测结果将显示在这里")
         self.result_label.setScaledContents(False)
-        result_layout.addWidget(self.result_label)
+        right_image_layout.addWidget(self.result_label)
+        
+        image_layout.addWidget(right_image_widget)
+
+        image_group.setLayout(image_layout)
+        right_layout.addWidget(image_group)
 
         # 检测统计
         self.stats_label = QLabel("就绪")
@@ -224,10 +290,7 @@ class PredictWidget(QWidget):
                 font-size: 13px;
             }
         """)
-        result_layout.addWidget(self.stats_label)
-
-        result_group.setLayout(result_layout)
-        right_layout.addWidget(result_group)
+        right_layout.addWidget(self.stats_label)
 
         # 添加到分割器
         splitter.addWidget(left_widget)
@@ -309,6 +372,15 @@ class PredictWidget(QWidget):
         # 获取参数
         conf_threshold = self.conf_slider.value() / 100
         iou_threshold = self.iou_slider.value() / 100
+        device_text = self.device_combo.currentText()
+        if device_text == '自动选择':
+            device = ''
+        elif device_text == 'CPU':
+            device = 'cpu'
+        else:
+            device = device_text.split()[-1].strip('()')
+        imgsz = int(self.imgsz_combo.currentText())
+        max_det = int(self.maxdet_combo.currentText())
 
         # 禁用按钮
         self.predict_btn.setEnabled(False)
@@ -319,7 +391,10 @@ class PredictWidget(QWidget):
             self.model_edit.text(),
             image_paths,
             conf_threshold,
-            iou_threshold
+            iou_threshold,
+            device,
+            imgsz,
+            max_det
         )
         self.predict_thread.result_signal.connect(self.show_result)
         self.predict_thread.finished_signal.connect(self.on_predict_finished)
@@ -330,23 +405,34 @@ class PredictWidget(QWidget):
         self.current_results = results
         self.current_image_path = image_path
 
-        # 绘制结果
-        img = results.plot()
+        # 显示原图像
+        original_img = cv2.imread(image_path)
+        if original_img is not None:
+            original_rgb = cv2.cvtColor(original_img, cv2.COLOR_BGR2RGB)
+            h, w, ch = original_rgb.shape
+            bytes_per_line = ch * w
+            original_qt = QImage(original_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            original_pixmap = QPixmap.fromImage(original_qt)
+            original_scaled = original_pixmap.scaled(
+                self.original_label.size(),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            )
+            self.original_label.setPixmap(original_scaled)
 
-        # 转换为Qt格式
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        h, w, ch = img_rgb.shape
+        # 显示预测结果
+        result_img = results.plot()
+        result_rgb = cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB)
+        h, w, ch = result_rgb.shape
         bytes_per_line = ch * w
-        qt_image = QImage(img_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
-
-        # 缩放显示
-        pixmap = QPixmap.fromImage(qt_image)
-        scaled_pixmap = pixmap.scaled(
+        result_qt = QImage(result_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        result_pixmap = QPixmap.fromImage(result_qt)
+        result_scaled = result_pixmap.scaled(
             self.result_label.size(),
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation
         )
-        self.result_label.setPixmap(scaled_pixmap)
+        self.result_label.setPixmap(result_scaled)
 
         # 统计信息
         boxes = results.boxes

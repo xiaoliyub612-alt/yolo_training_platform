@@ -47,6 +47,9 @@ class TrainThread(QThread):
                 workers=self.config['workers'],
                 project=self.config['project'],
                 name=self.config['name'],
+                rect=self.config['rect'],
+                cache=self.config['cache'],
+                augment=self.config['augment'],
                 exist_ok=True,
                 patience=50,
                 save=True,
@@ -69,9 +72,9 @@ class TrainThread(QThread):
 class TrainWidget(QWidget):
     """训练界面"""
 
-    def __init__(self, category_manager):
+    def __init__(self, product_manager):
         super().__init__()
-        self.category_manager = category_manager
+        self.product_manager = product_manager
         self.train_thread = None
         self.init_ui()
 
@@ -98,17 +101,25 @@ class TrainWidget(QWidget):
         data_layout.addWidget(self.data_btn)
         config_layout.addRow("数据集:", data_layout)
 
-        # 模型选择
+        # 模型选择（合并：可编辑下拉 + 浏览）
+        model_layout = QHBoxLayout()
         self.model_combo = QComboBox()
+        self.model_combo.setEditable(True)
         self.model_combo.addItems([
-            'yolov8n.pt (最快)',
-            'yolov8s.pt (快速)',
-            'yolov8m.pt (平衡)',
-            'yolov8l.pt (高精度)',
-            'yolov8x.pt (最高精度)'
+            'yolov8n.pt',
+            'yolov8s.pt',
+            'yolov8m.pt',
+            'yolov8l.pt',
+            'yolov8x.pt'
         ])
         self.model_combo.setCurrentIndex(0)
-        config_layout.addRow("预训练模型:", self.model_combo)
+        model_layout.addWidget(self.model_combo)
+
+        self.model_browse_btn = QPushButton("📁 浏览")
+        self.model_browse_btn.setMaximumWidth(80)
+        self.model_browse_btn.clicked.connect(self.select_model_file)
+        model_layout.addWidget(self.model_browse_btn)
+        config_layout.addRow("模型:", model_layout)
 
         # 训练轮数
         self.epochs_spin = QSpinBox()
@@ -158,6 +169,14 @@ class TrainWidget(QWidget):
         self.name_edit.setText("exp")
         self.name_edit.setPlaceholderText("训练任务名称")
         config_layout.addRow("任务名称:", self.name_edit)
+
+        # 额外训练参数
+        self.rect_combo = QComboBox(); self.rect_combo.addItems(['否', '是'])
+        config_layout.addRow("矩形训练(rect):", self.rect_combo)
+        self.cache_combo = QComboBox(); self.cache_combo.addItems(['否', 'ram', 'disk'])
+        config_layout.addRow("缓存(cache):", self.cache_combo)
+        self.augment_combo = QComboBox(); self.augment_combo.addItems(['否', '是'])
+        config_layout.addRow("数据增强(augment):", self.augment_combo)
 
         config_group.setLayout(config_layout)
         layout.addWidget(config_group)
@@ -282,6 +301,16 @@ class TrainWidget(QWidget):
         if directory:
             self.save_edit.setText(directory)
 
+    def select_model_file(self):
+        """选择模型文件 (.pt/.pth) 并填入合并输入框"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择模型文件",
+            os.path.expanduser("~"),
+            "PyTorch Model (*.pt *.pth)"
+        )
+        if file_path:
+            self.model_combo.setEditText(file_path)
+
     def start_training(self):
         """开始训练"""
         # 验证配置
@@ -307,9 +336,8 @@ class TrainWidget(QWidget):
         if reply == QMessageBox.No:
             return
 
-        # 准备配置
-        model_text = self.model_combo.currentText()
-        model_name = model_text.split()[0]
+        # 准备配置：模型合并输入（自定义优先）
+        model_name = self.model_combo.currentText().strip()
 
         device_text = self.device_combo.currentText()
         if device_text == '自动选择':
@@ -328,7 +356,10 @@ class TrainWidget(QWidget):
             'device': device,
             'workers': self.workers_spin.value(),
             'project': self.save_edit.text(),
-            'name': self.name_edit.text()
+            'name': self.name_edit.text(),
+            'rect': (self.rect_combo.currentText() == '是'),
+            'cache': (self.cache_combo.currentText() if self.cache_combo.currentText() != '否' else False),
+            'augment': (self.augment_combo.currentText() == '是')
         }
 
         # 清空日志

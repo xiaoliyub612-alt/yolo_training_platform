@@ -4,8 +4,8 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QTabWidget, QLabel, QMessageBox)
 
-from business.category_manager import CategoryManager
-from ui.category_widget import CategoryWidget
+from business.product_manager import ProductManager
+from ui.product_widget import ProductWidget
 from ui.label_widget import LabelWidget
 from ui.predict_widget import PredictWidget
 from ui.train_widget import TrainWidget
@@ -16,7 +16,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.category_manager = CategoryManager()
+        self.product_manager = ProductManager()
         self.init_ui()
 
     def init_ui(self):
@@ -72,12 +72,12 @@ class MainWindow(QMainWindow):
         """)
 
         # 创建各个功能标签页
-        self.category_widget = CategoryWidget(self.category_manager)
-        self.label_widget = LabelWidget(self.category_manager)
-        self.train_widget = TrainWidget(self.category_manager)
-        self.predict_widget = PredictWidget(self.category_manager)
+        self.product_widget = ProductWidget(self.product_manager)
+        self.label_widget = LabelWidget(self.product_manager)
+        self.train_widget = TrainWidget(self.product_manager)
+        self.predict_widget = PredictWidget(self.product_manager)
 
-        self.tab_widget.addTab(self.category_widget, "📋 类别管理")
+        self.tab_widget.addTab(self.product_widget, "📦 产品管理")
         self.tab_widget.addTab(self.label_widget, "🏷️ 数据标注")
         self.tab_widget.addTab(self.train_widget, "🎯 模型训练")
         self.tab_widget.addTab(self.predict_widget, "🔍 图像预测")
