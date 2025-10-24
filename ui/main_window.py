@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(5)
 
         # Header title
-        title_label = QLabel("SLDMVDeepLearningPlatForm")
+        title_label = QLabel("SLDMV深度学习平台")
         title_label.setStyleSheet(
             """
             QLabel {
@@ -113,8 +113,8 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.tab_widget, 1)
 
-        # Status bar
-        self.statusBar().showMessage("Ready")
+        # 状态栏
+        self.statusBar().showMessage("就绪")
         self.statusBar().setStyleSheet(
             """
             QStatusBar {
@@ -139,11 +139,11 @@ class MainWindow(QMainWindow):
             self.tab_widget.update()
 
     def closeEvent(self, event):
-        """Confirm before closing."""
+        """关闭前确认"""
         reply = QMessageBox.question(
             self,
-            "Confirm Exit",
-            "Exit SLDMVDeepLearningPlatForm?",
+            "确认退出",
+            "确定要退出SLDMVDeepLearningPlatForm吗？",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
