@@ -3,6 +3,7 @@
 这是对原labelme的最小化修改包装
 """
 import sys
+import os
 from PyQt5.QtWidgets import QMessageBox, QApplication
 from PyQt5.QtCore import QTimer
 
@@ -24,10 +25,27 @@ class LabelmeMainWindow(LabelmeMainWindowBase):
             raise ImportError("labelme模块未安装或不可用")
         
         try:
-            super().__init__(config, filename, output, output_file, output_dir)
+            # 如果提供了output_dir，确保它是绝对路径
+            if output_dir:
+                output_dir = os.path.abspath(output_dir)
+                # 确保目录存在
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir, exist_ok=True)
+            
+            # Use keyword args to match labelme's MainWindow signature.
+            # Passing positionally can misalign params and break output_dir handling.
+            super().__init__(
+                filename=filename,
+                output=output,
+                output_file=output_file,
+                config=config,
+                output_dir=output_dir,
+            )
             
             # 修改窗口标题
             self.setWindowTitle("SLDMV图像标注工具")
+            
+            # 不在启动时自动加载图片目录，保留用户手动打开行为
             
             # 延迟修改菜单，避免初始化时阻塞
             QTimer.singleShot(100, self._modify_menus)
@@ -35,6 +53,35 @@ class LabelmeMainWindow(LabelmeMainWindowBase):
         except Exception as e:
             print(f"Error initializing labelme: {e}")
             raise
+
+    def _load_directory(self, directory):
+        """加载目录（保留以备需要时调用，不在启动时自动触发）"""
+        try:
+            if hasattr(self, 'importDirImages'):
+                # 按目录加载但不强制打开首张图片，遵循labelme默认行为
+                self.importDirImages(directory, load=False)
+                print(f"Loaded directory: {directory}")
+        except Exception as e:
+            print(f"Error loading directory: {e}")
+
+    def setDirty(self, value=True):
+        """确保当有修改时启用保存按钮"""
+        try:
+            # 调用父类逻辑以保持原有状态处理
+            result = super().setDirty(value)  # type: ignore
+        except Exception:
+            result = None
+        try:
+            if hasattr(self, 'actions'):
+                # Save 在有更改时可用
+                if getattr(self.actions, 'save', None):
+                    self.actions.save.setEnabled(bool(value))
+                # Save As 一般在有图像时可用，这里始终允许运行以便用户另存
+                if getattr(self.actions, 'saveAs', None):
+                    self.actions.saveAs.setEnabled(True)
+        except Exception:
+            pass
+        return result
 
     def _modify_menus(self):
         """修改菜单 - 移除about或替换内容"""
@@ -138,10 +185,12 @@ class LabelmeMainWindow(LabelmeMainWindowBase):
             "&Help": "帮助(&H)",
 
             # 文件菜单
+            "&Open": "打开(&O)",
             "&Open\n": "打开(&O)\n",
             "Open Dir": "打开目录",
             "&Next Image": "下一张图像(&N)",
             "&Prev Image": "上一张图像(&P)",
+            "&Save": "保存(&S)",
             "&Save\n": "保存(&S)\n",
             "&Save As": "另存为(&A)",
             "&Close": "关闭(&C)",

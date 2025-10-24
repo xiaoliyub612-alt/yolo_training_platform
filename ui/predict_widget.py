@@ -223,27 +223,44 @@ class PredictWidget(QWidget):
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 图像对比显示
+       # 图像对比显示
         image_group = QGroupBox("图像对比")
         image_layout = QHBoxLayout()
+        image_layout.setSpacing(15)
 
         # 左侧：原图像
         left_image_widget = QWidget()
         left_image_layout = QVBoxLayout(left_image_widget)
+        left_image_layout.setContentsMargins(0, 0, 0, 0)
+        left_image_layout.setSpacing(5)
         
-        left_title = QLabel("原图像")
-        left_title.setStyleSheet("font-weight: bold; color: #2c3e50; font-size: 14px;")
+        left_title = QLabel("📷 原图像")
+        left_title.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #3498db, stop:1 #2980b9);
+                color: white;
+                font-weight: bold;
+                font-size: 11px;
+                padding: 4px;
+                border-radius: 3px;
+            }
+        """)
         left_title.setAlignment(Qt.AlignCenter)
+        left_title.setMaximumHeight(24)
         left_image_layout.addWidget(left_title)
         
         self.original_label = QLabel()
         self.original_label.setAlignment(Qt.AlignCenter)
         self.original_label.setStyleSheet("""
             QLabel {
-                background: #2c3e50;
-                border: 2px solid #34495e;
-                border-radius: 8px;
-                min-height: 300px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #34495e, stop:1 #2c3e50);
+                border: 2px solid #3498db;
+                border-radius: 6px;
+                min-height: 400px;
+                color: #95a5a6;
+                font-size: 13px;
             }
         """)
         self.original_label.setText("原图像将显示在这里")
@@ -255,20 +272,36 @@ class PredictWidget(QWidget):
         # 右侧：预测结果
         right_image_widget = QWidget()
         right_image_layout = QVBoxLayout(right_image_widget)
+        right_image_layout.setContentsMargins(0, 0, 0, 0)
+        right_image_layout.setSpacing(5)
         
-        right_title = QLabel("预测结果")
-        right_title.setStyleSheet("font-weight: bold; color: #2c3e50; font-size: 14px;")
+        right_title = QLabel("🎯 预测结果")
+        right_title.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2ecc71, stop:1 #27ae60);
+                color: white;
+                font-weight: bold;
+                font-size: 11px;
+                padding: 4px;
+                border-radius: 3px;
+            }
+        """)
         right_title.setAlignment(Qt.AlignCenter)
+        right_title.setMaximumHeight(24)
         right_image_layout.addWidget(right_title)
         
         self.result_label = QLabel()
         self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.setStyleSheet("""
             QLabel {
-                background: #2c3e50;
-                border: 2px solid #34495e;
-                border-radius: 8px;
-                min-height: 300px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #34495e, stop:1 #2c3e50);
+                border: 2px solid #2ecc71;
+                border-radius: 6px;
+                min-height: 400px;
+                color: #95a5a6;
+                font-size: 13px;
             }
         """)
         self.result_label.setText("预测结果将显示在这里")

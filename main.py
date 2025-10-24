@@ -17,8 +17,8 @@ def main():
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("YOLO训练平台")
-    app.setOrganizationName("YOLOPlatform")
+    app.setApplicationName("SLDMVDeepLearningPlatForm")
+    app.setOrganizationName("SLDMVDeepLearningPlatForm")
 
     # 设置全局字体
     font = QFont("Microsoft YaHei", 9)
