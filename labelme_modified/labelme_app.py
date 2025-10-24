@@ -27,7 +27,7 @@ class LabelmeMainWindow(LabelmeMainWindowBase):
             super().__init__(config, filename, output, output_file, output_dir)
             
             # 修改窗口标题
-            self.setWindowTitle("图像标注工具")
+            self.setWindowTitle("SLDMV图像标注工具")
             
             # 延迟修改菜单，避免初始化时阻塞
             QTimer.singleShot(100, self._modify_menus)

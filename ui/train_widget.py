@@ -69,6 +69,46 @@ class TrainThread(QThread):
         self.is_running = False
 
 
+class ExportThread(QThread):
+    """模型导出线程"""
+    log_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def run(self):
+        try:
+            from ultralytics import YOLO
+
+            # 加载模型
+            self.log_signal.emit(f"正在加载模型: {self.config['model']}...")
+            model = YOLO(self.config['model'])
+
+            # 导出模型
+            self.log_signal.emit(f"开始导出为 {self.config['format']} 格式...")
+            self.log_signal.emit(f"图像尺寸: {self.config['imgsz']}")
+            if self.config.get('half'):
+                self.log_signal.emit("使用半精度 (FP16)")
+            self.log_signal.emit("-" * 50)
+
+            # 执行导出
+            export_path = model.export(
+                format=self.config['format'],
+                imgsz=self.config['imgsz'],
+                half=self.config.get('half', False),
+                optimize=self.config.get('optimize', False),
+                simplify=self.config.get('simplify', False),
+                dynamic=self.config.get('dynamic', False)
+            )
+
+            self.finished_signal.emit(True, f"导出完成！文件已保存到: {export_path}")
+
+        except Exception as e:
+            self.finished_signal.emit(False, f"导出出错: {str(e)}")
+
+
 class TrainWidget(QWidget):
     """训练界面"""
 
@@ -76,6 +116,7 @@ class TrainWidget(QWidget):
         super().__init__()
         self.product_manager = product_manager
         self.train_thread = None
+        self.export_thread = None
         self.init_ui()
 
     def init_ui(self):
@@ -181,6 +222,69 @@ class TrainWidget(QWidget):
         config_group.setLayout(config_layout)
         layout.addWidget(config_group)
 
+        # ========== 新增：模型导出配置组 ==========
+        export_group = QGroupBox("模型导出配置")
+        export_layout = QFormLayout()
+        export_layout.setSpacing(10)
+
+        # 导出模型文件选择
+        export_model_layout = QHBoxLayout()
+        self.export_model_edit = QLineEdit()
+        self.export_model_edit.setPlaceholderText("选择要导出的模型文件 (.pt)")
+        export_model_layout.addWidget(self.export_model_edit)
+
+        self.export_model_btn = QPushButton("📁 浏览")
+        self.export_model_btn.clicked.connect(self.select_export_model)
+        self.export_model_btn.setMaximumWidth(80)
+        export_model_layout.addWidget(self.export_model_btn)
+        export_layout.addRow("模型文件:", export_model_layout)
+
+        # 导出格式
+        self.export_format_combo = QComboBox()
+        self.export_format_combo.addItems([
+            'onnx',      # ONNX
+            'torchscript',  # TorchScript
+            'openvino',  # OpenVINO
+            'engine',    # TensorRT
+            'coreml',    # CoreML
+            'saved_model',  # TensorFlow SavedModel
+            'pb',        # TensorFlow GraphDef
+            'tflite',    # TensorFlow Lite
+            'edgetpu',   # TensorFlow Edge TPU
+            'tfjs',      # TensorFlow.js
+            'paddle',    # PaddlePaddle
+            'ncnn'       # NCNN
+        ])
+        self.export_format_combo.setCurrentIndex(0)  # 默认ONNX
+        export_layout.addRow("导出格式:", self.export_format_combo)
+
+        # 导出图像尺寸
+        self.export_imgsz_combo = QComboBox()
+        self.export_imgsz_combo.addItems(['320', '416', '512', '640', '800', '1024'])
+        self.export_imgsz_combo.setCurrentIndex(3)  # 默认640
+        export_layout.addRow("图像尺寸:", self.export_imgsz_combo)
+
+        # 导出选项
+        self.export_half_combo = QComboBox()
+        self.export_half_combo.addItems(['否', '是'])
+        export_layout.addRow("半精度(FP16):", self.export_half_combo)
+
+        self.export_optimize_combo = QComboBox()
+        self.export_optimize_combo.addItems(['否', '是'])
+        export_layout.addRow("优化移动端:", self.export_optimize_combo)
+
+        self.export_simplify_combo = QComboBox()
+        self.export_simplify_combo.addItems(['否', '是'])
+        self.export_simplify_combo.setCurrentIndex(1)  # 默认简化
+        export_layout.addRow("简化ONNX:", self.export_simplify_combo)
+
+        self.export_dynamic_combo = QComboBox()
+        self.export_dynamic_combo.addItems(['否', '是'])
+        export_layout.addRow("动态输入:", self.export_dynamic_combo)
+
+        export_group.setLayout(export_layout)
+        layout.addWidget(export_group)
+
         # 控制按钮
         btn_layout = QHBoxLayout()
 
@@ -226,6 +330,28 @@ class TrainWidget(QWidget):
         self.stop_btn.clicked.connect(self.stop_training)
         self.stop_btn.setEnabled(False)
         btn_layout.addWidget(self.stop_btn)
+
+        # 新增：导出按钮
+        self.export_btn = QPushButton("📦 导出模型")
+        self.export_btn.setStyleSheet("""
+            QPushButton {
+                background: #3498db;
+                color: white;
+                border: none;
+                padding: 12px 30px;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #2980b9;
+            }
+            QPushButton:disabled {
+                background: #bdc3c7;
+            }
+        """)
+        self.export_btn.clicked.connect(self.start_export)
+        btn_layout.addWidget(self.export_btn)
 
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
@@ -311,6 +437,16 @@ class TrainWidget(QWidget):
         if file_path:
             self.model_combo.setEditText(file_path)
 
+    def select_export_model(self):
+        """选择要导出的模型文件"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择要导出的模型文件",
+            os.path.expanduser("~"),
+            "PyTorch Model (*.pt *.pth)"
+        )
+        if file_path:
+            self.export_model_edit.setText(file_path)
+
     def start_training(self):
         """开始训练"""
         # 验证配置
@@ -369,6 +505,7 @@ class TrainWidget(QWidget):
         # 禁用开始按钮，启用停止按钮
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.export_btn.setEnabled(False)
 
         # 创建并启动训练线程
         self.train_thread = TrainThread(config)
@@ -393,6 +530,59 @@ class TrainWidget(QWidget):
                 self.train_thread.wait()
                 self.start_btn.setEnabled(True)
                 self.stop_btn.setEnabled(False)
+                self.export_btn.setEnabled(True)
+
+    def start_export(self):
+        """开始导出模型"""
+        # 验证配置
+        if not self.export_model_edit.text():
+            QMessageBox.warning(self, "警告", "请选择要导出的模型文件！")
+            return
+
+        if not os.path.exists(self.export_model_edit.text()):
+            QMessageBox.warning(self, "警告", "模型文件不存在！")
+            return
+
+        # 确认导出
+        export_format = self.export_format_combo.currentText()
+        reply = QMessageBox.question(
+            self, '确认导出',
+            f'确定要导出模型吗？\n'
+            f'导出格式: {export_format}\n'
+            f'图像尺寸: {self.export_imgsz_combo.currentText()}\n'
+            f'这可能需要一些时间。',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.No:
+            return
+
+        # 准备导出配置
+        config = {
+            'model': self.export_model_edit.text(),
+            'format': export_format,
+            'imgsz': int(self.export_imgsz_combo.currentText()),
+            'half': (self.export_half_combo.currentText() == '是'),
+            'optimize': (self.export_optimize_combo.currentText() == '是'),
+            'simplify': (self.export_simplify_combo.currentText() == '是'),
+            'dynamic': (self.export_dynamic_combo.currentText() == '是')
+        }
+
+        # 清空日志
+        self.log_text.clear()
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("正在导出模型...")
+
+        # 禁用按钮
+        self.start_btn.setEnabled(False)
+        self.export_btn.setEnabled(False)
+
+        # 创建并启动导出线程
+        self.export_thread = ExportThread(config)
+        self.export_thread.log_signal.connect(self.append_log)
+        self.export_thread.finished_signal.connect(self.on_export_finished)
+        self.export_thread.start()
 
     def append_log(self, text):
         """添加日志"""
@@ -413,6 +603,7 @@ class TrainWidget(QWidget):
         """训练完成"""
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.export_btn.setEnabled(True)
 
         if success:
             self.progress_bar.setValue(100)
@@ -423,3 +614,19 @@ class TrainWidget(QWidget):
             self.append_log("=" * 50)
             self.append_log("❌ " + message)
             QMessageBox.warning(self, "训练失败", message)
+
+    def on_export_finished(self, success, message):
+        """导出完成"""
+        self.start_btn.setEnabled(True)
+        self.export_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("就绪")
+
+        if success:
+            self.append_log("=" * 50)
+            self.append_log("✅ " + message)
+            QMessageBox.information(self, "导出完成", message)
+        else:
+            self.append_log("=" * 50)
+            self.append_log("❌ " + message)
+            QMessageBox.warning(self, "导出失败", message)
