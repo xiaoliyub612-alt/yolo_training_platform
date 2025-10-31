@@ -2,7 +2,7 @@ import os
 import sys
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QIcon
 from PyQt5.QtWidgets import QApplication
 
 # 添加当前目录到系统路径
@@ -15,11 +15,11 @@ def main():
     # 启用高DPI缩放
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-
+    icon_path=os.path.join("icon","SLD-Logo-256.ico")
     app = QApplication(sys.argv)
-    app.setApplicationName("SLDMVDeepLearningPlatForm")
-    app.setOrganizationName("SLDMVDeepLearningPlatForm")
-
+    app.setApplicationName("YOLO训练平台")
+    app.setOrganizationName("YOLOPlatform")
+    app.setWindowIcon(QIcon(icon_path))
     # 设置全局字体
     font = QFont("Microsoft YaHei", 9)
     app.setFont(font)
